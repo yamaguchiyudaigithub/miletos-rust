@@ -1,0 +1,88 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+
+namespace ConfigParser
+{
+    public class SysctlConfigParser
+    {
+        public Dictionary<string, object> Parse(string filePath)
+        {
+            var config = new Dictionary<string, object>();
+
+            foreach (var line in File.ReadLines(filePath))
+            {
+                var trimmedLine = line.Trim();
+                if (string.IsNullOrEmpty(trimmedLine) || trimmedLine.StartsWith("#"))
+                {
+                    continue;
+                }
+
+                var parts = trimmedLine.Split(new[] { '=' }, 2);
+                if (parts.Length != 2)
+                {
+                    throw new FormatException($"Invalid line format: {line}");
+                }
+
+                var key = parts[0].Trim();
+                var value = parts[1].Trim().Trim('"', '\'');
+
+                SetNestedValue(config, key.Split('.'), ParseValue(value));
+            }
+
+            return config;
+        }
+
+        private void SetNestedValue(Dictionary<string, object> dict, string[] keys, object value)
+        {
+            for (int i = 0; i < keys.Length - 1; i++)
+            {
+                if (!dict.ContainsKey(keys[i]))
+                {
+                    dict[keys[i]] = new Dictionary<string, object>();
+                }
+                dict = (Dictionary<string, object>)dict[keys[i]];
+            }
+
+            dict[keys.Last()] = value;
+        }
+
+        private object ParseValue(string value)
+        {
+            if (bool.TryParse(value, out bool boolResult))
+            {
+                return boolResult;
+            }
+            if (int.TryParse(value, out int intResult))
+            {
+                return intResult;
+            }
+            if (double.TryParse(value, out double doubleResult))
+            {
+                return doubleResult;
+            }
+            return value;
+        }
+    }
+}
+
+using System;
+using System.Text.Json;
+
+namespace ConfigParser
+{
+    class Program
+    {
+        static void Main(string[] args)
+        {
+            var parser = new SysctlConfigParser();
+            var config = parser.Parse("config.conf");
+
+            Console.WriteLine(JsonSerializer.Serialize(config, new JsonSerializerOptions
+            {
+                WriteIndented = true
+            }));
+        }
+    }
+}
